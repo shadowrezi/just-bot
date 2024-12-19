@@ -1,9 +1,12 @@
 from aiohttp import ClientSession
 import aiofiles
+from aiofiles.os import remove
+from aiofiles.os import path
 
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message, FSInputFile
+from aiogram.enums.parse_mode import ParseMode
 
 from youtube_search import YoutubeSearch
 import yt_dlp
@@ -37,32 +40,36 @@ async def music(message: Message):
     try:
         video = await search_video(query)
     except Exception as ex:
-        await message.answer(SONG_NOT_FOUND, parse_mode='Markdown')
+        await message.answer(SONG_NOT_FOUND, parse_mode=ParseMode.HTML)
         print(ex)
         return
+    try:
+        msg = await message.answer(
+            DOWNLOADING_FILE,
+            parse_mode=ParseMode.HTML
+        )
+        audio_file, duration, title, thumb_name = await download_video(video)
 
-    msg = await message.answer(DOWNLOADING_FILE, parse_mode='Markdown')
+        msg.edit_text(UPLOADING_FILE, parse_mode=ParseMode.HTML)
 
-    audio_file, duration, title, thumb_name = await download_video(video)
+        audio = FSInputFile(audio_file)
+        thumbnail = FSInputFile(thumb_name)
 
-    msg.edit_text(UPLOADING_FILE, parse_mode='Markdown')
-
-    audio = FSInputFile(audio_file)
-    thumbnail = FSInputFile(thumb_name)
-
-    await message.answer_audio(
-        audio=audio,
-        title=title,
-        duration=duration,
-        thumbnail=thumbnail
-    )
+        await message.answer_audio(
+            audio=audio,
+            title=title,
+            duration=duration,
+            thumbnail=thumbnail
+        )
     except Exception as ex:
         await message.answer('Error:')
         print(ex)
     finally:
         await msg.delete()
-        await aiofiles.os.remove(audio_file)
-        await aiofiles.os.remove(thumb_name)
+        if await path.exists(audio_file):
+            await remove(audio_file)
+        if await path.exists(thumb_name):
+            await remove(thumb_name)
 
 
 async def search_video(query: str) -> tuple:
